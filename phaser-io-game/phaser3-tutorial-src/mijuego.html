@@ -1,0 +1,193 @@
+<!doctype html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8" />
+    <title>Making your first Phaser 3 Game - Part 1</title>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+    var config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: { y: 300 },
+            debug: false
+        }
+    },
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+
+    var score = 0;
+    var scoreText;
+    var platforms;
+    var stars;
+    var player;
+    var bombs;
+    var game = new Phaser.Game(config);
+
+    function preload ()
+    {
+        this.load.image('sky', 'assets/sky.png');
+        this.load.image('ground', 'assets/platform.png');
+        this.load.image('star', 'assets/star.png');
+        this.load.image('bomb', 'assets/bomb.png');
+        this.load.spritesheet('garl', 
+        'assets/garl.png',
+        { frameWidth: 49, frameHeight: 50 });
+        this.load.spritesheet('dude', 
+        'assets/dude.png',
+        { frameWidth: 32, frameHeight: 48 });
+    }
+
+
+    function create ()
+    {
+    this.add.image(400, 300, 'sky'); // meter el fondo que esta cargado
+
+    platforms = this.physics.add.staticGroup(); //estamos creando un grupo de entidades que van a ser estaticas. Luego lo que le asignemos, en este caso, ground, va a ser estatico
+
+    platforms.create(400, 568, 'ground').setScale(2).refreshBody(); // el tamano de la imagen es 400x32, al multiplicarlo por dos es 800x64, entonces ocupa toda la pantalla y le da una altura interesante
+
+    platforms.create(600, 400, 'ground');
+    platforms.create(50, 250, 'ground');
+    platforms.create(750, 220, 'ground');
+
+    stars = this.physics.add.group({
+    key: 'star',
+    repeat: 11,
+    setXY: { x: 12, y: 0, stepX: 70 }
+    });
+    // es en el paso siguiente donde entiende que star es el individuo de stars y que por eso se puede utilizar al final.
+    stars.children.iterate(function (child) {
+
+    child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+
+    });
+
+
+    player = this.physics.add.sprite(100, 450, 'garl'); 
+    // crea el personaje
+
+    player.body.setGravityY(200) // le da gravity
+    player.setBounce(0.2); // le da un peque bote
+    player.setCollideWorldBounds(true); // no puede salir de la pantalla
+
+
+    // ahora vienen las asignaciones de movimientos
+
+    this.anims.create({
+    key: 'left',
+    frames: this.anims.generateFrameNumbers('garl', { start: 2, end: 2 }),
+    frameRate: 10,
+    repeat: -1
+    });
+
+    this.anims.create({
+    key: 'turn',
+    frames: [ { key: 'garl', frame: 0 } ],
+    frameRate: 20
+    });
+
+    this.anims.create({
+    key: 'right',
+    frames: this.anims.generateFrameNumbers('garl', { start: 1, end: 1 }),
+    frameRate: 10,
+    repeat: -1
+    });    
+
+    cursors = this.input.keyboard.createCursorKeys(); //esto activa que podamos utilizar los botones.
+
+
+
+    bombs = this.physics.add.group();
+
+
+    this.physics.add.collider(player,platforms); 
+    // crea el contacto entre jugador y plataforma
+    this.physics.add.collider(stars, platforms);
+    this.physics.add.collider(bombs, platforms);
+
+
+    this.physics.add.overlap(player, stars, collectStar, null, this);
+    this.physics.add.collider(player, bombs, hitBomb, null, this);
+
+    // esta es la funcion chunga que hace que si el jugador toca la estrella, se active la funcion collectStar que definimos justo debajo en update para que las estrellas desaparezcan.
+
+    // la siguiente hace que se active hitBomb que lo que hara sera liarnolas y perder el juego.
+
+    // Vamos a ver aqui lo del contador 
+    scoreText = this.add.text(16, 16, 'Estrellas: 0', { fontSize: '32px', fill: '#000' });
+
+
+
+    }
+
+    function update ()
+    {
+    if (cursors.left.isDown){player.setVelocityX(-160);player.anims.play('left', true);} //activa el left de arriba.
+    else if (cursors.right.isDown){player.setVelocityX(160);player.anims.play('right', true);}
+    else{player.setVelocityX(0);player.anims.play('turn');}
+
+    if (cursors.up.isDown && player.body.touching.down){player.setVelocityY(-430);}
+
+    }
+    // esto nos estaba dando problemas: la funcion collectStar esta fuera de upload, create y de update.
+    function collectStar (player, star)
+    {
+        star.disableBody(true, true);
+
+        score += 1;
+        scoreText.setText('Estrellas: ' + score);
+
+        if (stars.countActive(true) === 0)
+        {
+        stars.children.iterate(function (child) {
+
+            child.enableBody(true, child.x, 0, true, true);
+
+        });
+
+        var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+
+        var bomb = bombs.create(x, 16, 'bomb');
+        bomb.setBounce(1);
+        bomb.setCollideWorldBounds(true);
+        bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
+
+        }
+
+    }
+
+    function hitBomb (player, bomb)
+    {
+    this.physics.pause();
+
+    player.setTint(0xff0000);
+
+    player.anims.play('turn');
+
+    gameOver = true;
+    }
+    //lo que hace es basicamente parar el juego si se toca una bomba y que se ponga el personaje en rojo.
+
+
+
+</script>
+
+</body>
+</html>
